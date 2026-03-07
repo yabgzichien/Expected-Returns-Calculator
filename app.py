@@ -69,10 +69,6 @@ import sys
 # Configure logging
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    return jsonify({'status': 'healthy', 'message': 'Stock analyzer API is running'})
-
 @app.errorhandler(500)
 def handle_500(error):
     return jsonify({'error': 'Internal server error', 'success': False}), 500
