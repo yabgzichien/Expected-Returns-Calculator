@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Risk & Return Analyzer - Malaysia Top 30 Companies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📈 Stock Risk & Return Analyzer</h1>
+            <p>Analyze expected returns and standard deviation for Malaysia Top 30 Companies</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Stock Selection Section -->
+            <div class="selection-section">
+                <h2>Select Stocks for Portfolio Analysis</h2>
+                
+                <div class="stock-selector">
+                    <!-- Search Box -->
+                    <div class="search-box">
+                        <input type="text" id="stock-search" placeholder="Search stocks by symbol or name..." autocomplete="off">
+                        <div id="search-results" class="search-results"></div>
+                    </div>
+                    
+                    <!-- Selected Stocks -->
+                    <div class="selected-stocks">
+                        <h3>Selected Stocks <span class="stock-count" id="stock-count">(0/5)</span></h3>
+                        <div id="stock-list" class="stock-list">
+                            <p class="no-stocks">No stocks selected. Search above or browse by sector.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stock Browser by Sector -->
+                <div class="stock-browser-section">
+                    <h3>Browse Stocks by Sector</h3>
+                    <div id="stock-browser" class="stock-browser">
+                        <p class="loading">Loading stocks...</p>
+                    </div>
+                </div>
+                <div class="date-range-section">
+    <h3>Analysis Period</h3>
+            <div class="date-inputs">
+                <div class="date-input-group">
+                    <label for="start-date">Start Date:</label>
+                    <input type="date" id="start-date" value="2010-01-01" min="2000-01-01" max="2026-12-31">
+                </div>
+                <div class="date-input-group">
+                    <label for="end-date">End Date:</label>
+                    <input type="date" id="end-date" value="2026-01-01" min="2000-01-01" max="2026-12-31">
+                </div>
+                <div class="date-presets">
+                    <button type="button" class="date-preset-btn" onclick="StockAnalyzer.setDatePreset('5y')">5Y</button>
+                    <button type="button" class="date-preset-btn" onclick="StockAnalyzer.setDatePreset('10y')">10Y</button>
+                    <button type="button" class="date-preset-btn" onclick="StockAnalyzer.setDatePreset('15y')">15Y</button>
+                    <button type="button" class="date-preset-btn" onclick="StockAnalyzer.setDatePreset('max')">MAX</button>
+                </div>
+            </div>
+        </div>
+
+                <!-- Portfolio Weights -->
+                <div class="weight-section">
+                    <h3>Portfolio Weights</h3>
+                    <div id="weight-inputs" class="weight-inputs">
+                        <p>Select at least 2 stocks to set portfolio weights</p>
+                    </div>
+                    <div class="weight-actions">
+                        <button id="equal-weights" class="btn-secondary">Set Equal Weights</button>
+                        <button id="clear-all" class="btn-secondary btn-clear">Clear All</button>
+                    </div>
+                </div>
+
+                <!-- Analyze Button -->
+                <button id="analyze-btn" class="btn-primary">Analyze Portfolio</button>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-section" id="results-section" style="display: none;">
+                <h2>Analysis Results</h2>
+                
+                <!-- Portfolio Summary -->
+                <div class="portfolio-summary" id="portfolio-summary"></div>
+                
+                <!-- Stock Cards -->
+                <div class="stock-cards" id="stock-cards"></div>
+                
+                <!-- Charts -->
+                <div class="charts-section">
+                    <h3>Annual Returns Comparison</h3>
+                    <div class="chart-container">
+                        <canvas id="returns-chart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Metrics Table -->
+                <div class="metrics-table-section">
+                <h3>Risk Metrics Summary</h3>
+                <div class="table-responsive">
+                    <table class="metrics-table" id="metrics-table">
+                        <thead>
+                            <tr>
+                                <th>Stock</th>
+                                <th>Expected Return</th>
+                                <th>Std Deviation (Risk)</th>
+                                <th>Variance</th>
+                                <th>Data Points</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metrics-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Analyzing stocks...</div>
+    </div>
+
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Main JavaScript -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
