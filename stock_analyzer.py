@@ -5,8 +5,6 @@ import json
 import time
 import random
 from datetime import datetime, timedelta
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 class NumpyEncoder(json.JSONEncoder):
     """Custom JSON encoder for numpy types"""
@@ -41,38 +39,12 @@ class StockAnalyzer:
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15'
         ]
     
-    def _create_robust_session(self):
-        """Create a session with retry strategy and random user agent"""
-        session = yf.Session()
-        
-        # Set random user agent to avoid blocking
-        session.headers['User-Agent'] = random.choice(self.user_agents)
-        
-        # Add additional headers to look like a real browser
-        session.headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-        session.headers['Accept-Language'] = 'en-US,en;q=0.5'
-        session.headers['Accept-Encoding'] = 'gzip, deflate, br'
-        session.headers['Connection'] = 'keep-alive'
-        session.headers['Upgrade-Insecure-Requests'] = '1'
-        
-        # Add retry strategy
-        retry_strategy = Retry(
-            total=5,
-            backoff_factor=2,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["HEAD", "GET", "OPTIONS"]
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("https://", adapter)
-        session.mount("http://", adapter)
-        
-        return session
-    
     def _safe_float(self, value):
         """Safely convert value to float"""
         try:
             if value is None or pd.isna(value):
                 return None
+            # Handle Series objects
             if isinstance(value, pd.Series):
                 value = value.iloc[0] if len(value) > 0 else None
             return float(value)
@@ -84,6 +56,7 @@ class StockAnalyzer:
         try:
             if value is None or pd.isna(value):
                 return None
+            # Handle Series objects
             if isinstance(value, pd.Series):
                 value = value.iloc[0] if len(value) > 0 else None
             return int(value)
@@ -92,8 +65,8 @@ class StockAnalyzer:
     
     def analyze_stock(self, stock_symbol, start_date="2015-01-01", end_date="2026-01-01", min_years=3):
         """
-        Analyze a single stock with robust error handling for cloud deployment
-        Note: Using 2015 as default start to ensure data availability
+        Analyze a single stock and return its metrics with calculation steps
+        Using 2015 as default start to ensure data availability
         """
         max_retries = 3
         
@@ -105,10 +78,7 @@ class StockAnalyzer:
                 if attempt > 0:
                     time.sleep(2 ** attempt)  # Exponential backoff
                 
-                # Create robust session
-                session = self._create_robust_session()
-                
-                # Download data with repair=True and auto_adjust=False
+                # Download data with repair=True
                 data = yf.download(
                     stock_symbol, 
                     start=start_date, 
@@ -116,9 +86,7 @@ class StockAnalyzer:
                     interval='1mo', 
                     actions=True, 
                     progress=False,
-                    session=session,
-                    repair=True,  # Fix common data issues
-                    auto_adjust=False,
+                    repair=True,
                     timeout=30
                 )
                 
@@ -140,6 +108,8 @@ class StockAnalyzer:
                 yearly_prices = prices.resample('Y').last()
                 yearly_dividends = dividends.resample('Y').sum()
                 
+                print(f"Yearly data. Prices: {len(yearly_prices)}, Dividends: {len(yearly_dividends)}")
+                
                 # Calculate annual returns including dividends
                 annual_returns = []
                 years = []
@@ -147,6 +117,7 @@ class StockAnalyzer:
                 
                 for i in range(1, len(yearly_prices)):
                     try:
+                        # Get values and convert to float safely
                         P_t = self._safe_float(yearly_prices.iloc[i])
                         P_t1 = self._safe_float(yearly_prices.iloc[i-1])
                         D_t = self._safe_float(yearly_dividends.iloc[i])
@@ -161,33 +132,37 @@ class StockAnalyzer:
                             year = yearly_prices.index[i].year
                             years.append(int(year))
                             
+                            # Store calculation steps for display
                             return_calculations.append({
                                 'year': year,
                                 'formula': f"Rate of Return = (P<sub>t</sub> - P<sub>t-1</sub> + D<sub>t</sub>) / P<sub>t-1</sub>",
                                 'values': f"= (RM{P_t:.2f} - RM{P_t1:.2f} + RM{D_t:.2f}) / RM{P_t1:.2f}",
                                 'result': f"= {total_return*100:.2f}%"
                             })
+                            
+                            print(f"Year {year}: Return={total_return*100:.2f}%")
                     except Exception as e:
                         print(f"Error processing year {i}: {e}")
                         continue
                 
                 if len(annual_returns) < min_years:
-                    print(f"Insufficient data for {stock_symbol}. Found {len(annual_returns)} years")
+                    print(f"Insufficient data for {stock_symbol}. Found {len(annual_returns)} years, need {min_years}")
                     continue
                 
                 # Calculate metrics
                 returns_array = np.array(annual_returns)
                 n = len(annual_returns)
+                prob = 1.0 / n  # Equal probability for each year
                 
-                # Expected Return
+                # Expected Return Calculation (Equation 7-3 from slides)
                 exp_return = float(np.mean(returns_array))
                 
-                # Expected return steps
+                # Create expected return calculation steps
                 expected_return_steps = {
                     'formula': 'E(r) = Σ (r<sub>i</sub> × p<sub>i</sub>)',
                     'components': [
                         {
-                            'description': f'With {n} years of data, assign equal probability p = 1/{n}',
+                            'description': f'With {n} years of data, we assign equal probability p = 1/{n} to each year',
                             'calculation': f'E(r) = (1/{n}) × Σ r<sub>i</sub>'
                         },
                         {
@@ -196,22 +171,23 @@ class StockAnalyzer:
                             'sum': f'= {sum(annual_returns)*100:.2f}%'
                         },
                         {
-                            'description': 'Final calculation:',
+                            'description': 'Multiply by probability:',
                             'calculation': f'E(r) = (1/{n}) × {sum(annual_returns)*100:.2f}%',
                             'result': f'= {exp_return*100:.2f}%'
                         }
                     ]
                 }
                 
-                # Variance
+                # Variance Calculation (Equation 7-5 from slides)
+                squared_deviations = [(r - exp_return)**2 for r in annual_returns]
                 variance = float(np.var(annual_returns))
                 
-                # Variance steps
+                # Create variance calculation steps
                 variance_steps = {
                     'formula': 'σ² = Σ [(r<sub>i</sub> - E(r))² × p<sub>i</sub>]',
                     'components': [
                         {
-                            'description': 'Step 1: Calculate deviations [r<sub>i</sub> - E(r)]',
+                            'description': 'Step 1: Calculate deviations from expected return [r<sub>i</sub> - E(r)]',
                             'values': [f'{r*100:.2f}% - {exp_return*100:.2f}% = {(r - exp_return)*100:.2f}%' for r in annual_returns[:3]]
                         },
                         {
@@ -226,9 +202,10 @@ class StockAnalyzer:
                     ]
                 }
                 
-                # Standard Deviation
+                # Standard Deviation Calculation
                 std_dev = float(np.std(annual_returns))
                 
+                # Create standard deviation steps
                 std_dev_steps = {
                     'formula': 'σ = √σ² = √variance',
                     'calculation': f'σ = √{variance:.6f}',
@@ -236,13 +213,13 @@ class StockAnalyzer:
                 }
                 
                 # Get stock info
-                ticker = yf.Ticker(stock_symbol, session=session)
+                ticker = yf.Ticker(stock_symbol)
                 info = ticker.info
                 
                 # Get current price
                 current_price = self._safe_float(prices.iloc[-1])
                 
-                # Convert annual returns to percentages
+                # Convert annual returns to percentages and round
                 annual_returns_pct = [round(r * 100, 2) for r in annual_returns]
                 
                 result = {
@@ -266,7 +243,7 @@ class StockAnalyzer:
                     }
                 }
                 
-                # Verify JSON serializable
+                # Verify all values are JSON serializable
                 json.dumps(result, cls=NumpyEncoder)
                 print(f"Successfully analyzed {stock_symbol}")
                 
@@ -282,16 +259,22 @@ class StockAnalyzer:
                         'error': f"Failed after {max_retries} attempts: {str(e)}"
                     }
                 continue
+        
+        return {
+            'success': False,
+            'error': f"Failed to analyze {stock_symbol} after {max_retries} attempts"
+        }
     
     def analyze_multiple_stocks(self, stock_list, weights=None, start_date="2015-01-01", end_date="2026-01-01"):
-        """Analyze multiple stocks with portfolio calculation"""
+        """Analyze multiple stocks - returns individual results and portfolio if multiple"""
         results = []
         errors = []
         
         print(f"Analyzing multiple stocks: {stock_list} from {start_date} to {end_date}")
         
         for stock in stock_list:
-            result = self.analyze_stock(stock, start_date=start_date, end_date=end_date)
+            print(f"Analyzing {stock}...")
+            result = self.analyze_stock(stock, start_date=start_date, end_date=end_date, min_years=3)
             if result and result.get('success'):
                 results.append(result)
                 print(f"Successfully analyzed {stock}")
@@ -318,36 +301,123 @@ class StockAnalyzer:
             }
         }
         
-        # Calculate portfolio metrics if multiple stocks
+        # If we have multiple stocks, calculate portfolio metrics
         if len(results) > 1:
+            # Use provided weights or equal weights
             if not weights:
                 weights = [1.0/len(results)] * len(results)
+                weight_type = "equal"
             else:
                 weights = [float(w) for w in weights]
+                weight_type = "custom"
                 weight_sum = sum(weights)
                 if abs(weight_sum - 1.0) > 0.01:
                     weights = [w/weight_sum for w in weights]
             
             # Calculate portfolio return
             portfolio_return = 0.0
-            portfolio_calculation_steps = [
-                {'step': 1, 'description': 'Portfolio Expected Return Formula', 'formula': 'E(Rp) = Σ wᵢ × E(Rᵢ)'},
-                {'step': 2, 'description': 'Portfolio Weights', 'details': [f"{stock['symbol']}: {round(w*100,1)}%" for w, stock in zip(weights, results)]},
-                {'step': 3, 'description': 'Individual Expected Returns', 'details': [f"{stock['symbol']}: {stock['expected_return']}%" for stock in results]},
-                {'step': 4, 'description': 'Apply Formula', 'calculation': 'E(Rp) = ' + ' + '.join([f"({round(w*100,1)}% × {stock['expected_return']}%)" for w, stock in zip(weights, results)])}
-            ]
+            portfolio_calculation_steps = []
             
+            # Build calculation steps
+            portfolio_calculation_steps.append({
+                'step': 1,
+                'description': 'Portfolio Expected Return Formula',
+                'formula': 'E(Rp) = w₁ × E(R₁) + w₂ × E(R₂) + ... + wₙ × E(Rₙ)'
+            })
+            
+            # Show weights
+            weight_details = []
+            for i, (w, stock) in enumerate(zip(weights, results)):
+                weight_pct = round(w * 100, 1)
+                weight_details.append(f"w{i+1} ({stock['symbol']}) = {weight_pct}%")
+            
+            portfolio_calculation_steps.append({
+                'step': 2,
+                'description': 'Portfolio Weights',
+                'details': weight_details
+            })
+            
+            # Show individual stock returns
+            return_details = []
+            for i, stock in enumerate(results):
+                return_details.append(f"E(R{i+1}) ({stock['symbol']}) = {stock['expected_return']}%")
+            
+            portfolio_calculation_steps.append({
+                'step': 3,
+                'description': 'Individual Stock Expected Returns',
+                'details': return_details
+            })
+            
+            # Show the full calculation
+            calc_parts = []
+            for i, (w, stock) in enumerate(zip(weights, results)):
+                w_pct = round(w * 100, 1)
+                calc_parts.append(f"({w_pct}% × {stock['expected_return']}%)")
+            
+            portfolio_calculation_steps.append({
+                'step': 4,
+                'description': 'Apply the Formula',
+                'calculation': 'E(Rp) = ' + ' + '.join(calc_parts)
+            })
+            
+            # Calculate intermediate products
+            intermediate = []
+            for i, (w, stock) in enumerate(zip(weights, results)):
+                product = w * stock['expected_return']
+                intermediate.append(f"{round(product, 2)}%")
+            
+            portfolio_calculation_steps.append({
+                'step': 5,
+                'description': 'Calculate each term',
+                'calculation': ' = ' + ' + '.join(intermediate)
+            })
+            
+            # Final result
             for w, stock in zip(weights, results):
                 portfolio_return += w * stock['expected_return']
             
-            portfolio_calculation_steps.append({'step': 5, 'description': 'Final Result', 'result': f'Expected Portfolio Return = {round(portfolio_return, 2)}%'})
+            portfolio_calculation_steps.append({
+                'step': 6,
+                'description': 'Sum all terms',
+                'calculation': f'= {round(portfolio_return, 2)}%',
+                'result': f'Expected Portfolio Return = {round(portfolio_return, 2)}%'
+            })
             
             response['weights'] = [round(w * 100, 1) for w in weights]
             response['portfolio_return'] = round(portfolio_return, 2)
+            response['weight_type'] = weight_type
             response['portfolio_calculation_steps'] = portfolio_calculation_steps
+            
+            print(f"Portfolio calculation steps created: {len(portfolio_calculation_steps)} steps")
         
         if errors:
             response['errors'] = errors
         
+        # Verify JSON serializable
         json.dumps(response, cls=NumpyEncoder)
+        print(f"Analysis complete. Valid stocks: {len(results)}")
+        if len(results) > 1:
+            print(f"Portfolio return: {portfolio_return}%")
+        
         return response
+    
+    def get_stock_info(self, stock_symbol):
+        """Get basic stock information"""
+        try:
+            ticker = yf.Ticker(stock_symbol)
+            info = ticker.info
+            
+            return {
+                'success': True,
+                'symbol': str(stock_symbol),
+                'name': str(info.get('longName', stock_symbol)),
+                'sector': str(info.get('sector', 'N/A')),
+                'industry': str(info.get('industry', 'N/A')),
+                'market_cap': self._safe_float(info.get('marketCap')),
+                'currency': str(info.get('currency', 'MYR'))
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }
