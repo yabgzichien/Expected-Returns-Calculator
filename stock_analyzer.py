@@ -150,7 +150,7 @@ class StockAnalyzer:
             return None
     
     def analyze_stock(self, symbol, start_date, end_date):
-        """Calculate metrics excluding the final year to match Jupyter notebook"""
+        """Calculate metrics for a single stock with calculation steps"""
         
         print(f"Analyzing {symbol} from {start_date} to {end_date}")
         
@@ -183,10 +183,10 @@ class StockAnalyzer:
         
         annual_returns = []
         years = []
+        return_calculations = []
         
-        # CRITICAL FIX: Stop one year before the end to exclude current year
-        # This matches Jupyter notebook which doesn't include 2026
-        for i in range(1, len(yearly_prices) - 1):  # Note: -1 here is the key fix
+        # Stop one year before the end to exclude current year
+        for i in range(1, len(yearly_prices) - 1):
             try:
                 prev_price = float(yearly_prices.iloc[i-1])
                 curr_price = float(yearly_prices.iloc[i])
@@ -195,25 +195,79 @@ class StockAnalyzer:
                 if prev_price > 0 and curr_price > 0:
                     total_return = (curr_price - prev_price + div) / prev_price
                     annual_returns.append(total_return)
-                    years.append(yearly_prices.index[i].year)
-                    print(f"Year {years[-1]}: Return={total_return*100:.2f}%")
+                    year = yearly_prices.index[i].year
+                    years.append(year)
+                    
+                    # Store calculation steps
+                    return_calculations.append({
+                        'year': year,
+                        'formula': 'Rate of Return = (P<sub>t</sub> - P<sub>t-1</sub> + D<sub>t</sub>) / P<sub>t-1</sub>',
+                        'values': f"= (RM{curr_price:.2f} - RM{prev_price:.2f} + RM{div:.2f}) / RM{prev_price:.2f}",
+                        'result': f"= {total_return*100:.2f}%"
+                    })
+                    
+                    print(f"Year {year}: Return={total_return*100:.2f}%")
             except Exception as e:
                 continue
         
         if len(annual_returns) < 2:
             return {'success': False, 'error': f'Insufficient yearly data. Only {len(annual_returns)} years found.'}
         
-        # Calculate metrics (population statistics)
+        # Calculate metrics
         returns_array = np.array(annual_returns)
         n = len(annual_returns)
         
+        # Expected return
         exp_return = float(np.sum(returns_array) / n)
+        
+        # Variance (population variance)
         squared_deviations = [(r - exp_return) ** 2 for r in returns_array]
         variance = float(np.sum(squared_deviations) / n)
+        
+        # Standard deviation
         std_dev = float(np.sqrt(variance))
         
+        # Current price
         current_price = float(prices.iloc[-1])
+        
+        # Annual returns as percentages
         annual_returns_pct = [round(r * 100, 2) for r in annual_returns]
+        
+        # Create detailed calculation steps
+        calculation_steps = {
+            'annual_returns': return_calculations,
+            'expected_return': {
+                'formula': 'E(r) = (1/n) × Σ rᵢ',
+                'steps': [
+                    f"Step 1: Sum all annual returns",
+                    f"Σ rᵢ = {' + '.join([f'{r}%' for r in annual_returns_pct])} = {sum(annual_returns)*100:.2f}%",
+                    f"Step 2: Divide by number of years (n = {n})",
+                    f"E(r) = {sum(annual_returns)*100:.2f}% / {n} = {exp_return*100:.2f}%"
+                ],
+                'result': f"{exp_return*100:.2f}%"
+            },
+            'variance': {
+                'formula': 'σ² = (1/n) × Σ (rᵢ - E(r))²',
+                'steps': [
+                    "Step 1: Calculate deviations from expected return",
+                    *[f"Year {years[j]}: {annual_returns_pct[j]}% - {exp_return*100:.2f}% = {(annual_returns[j] - exp_return)*100:.2f}%" 
+                    for j in range(min(3, n))],
+                    "Step 2: Square each deviation",
+                    *[f"({(annual_returns[j] - exp_return)*100:.2f}%)² = {(annual_returns[j] - exp_return)**2:.6f}" 
+                    for j in range(min(3, n))],
+                    f"Step 3: Sum squared deviations and divide by {n}",
+                    f"σ² = {variance:.6f}"
+                ],
+                'result': f"{variance:.6f}"
+            },
+            'std_deviation': {
+                'formula': 'σ = √σ²',
+                'steps': [
+                    f"σ = √{variance:.6f} = {std_dev*100:.2f}%"
+                ],
+                'result': f"{std_dev*100:.2f}%"
+            }
+        }
         
         result = {
             'success': True,
@@ -227,7 +281,8 @@ class StockAnalyzer:
             'years': years,
             'data_points': n,
             'start_date': start_date,
-            'end_date': end_date
+            'end_date': end_date,
+            'calculation_steps': calculation_steps  # This is crucial!
         }
         
         print(f"Results: Return={exp_return*100:.2f}%, Variance={variance:.6f}, StdDev={std_dev*100:.2f}%")

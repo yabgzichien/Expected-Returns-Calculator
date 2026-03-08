@@ -747,6 +747,7 @@ const StockAnalyzer = {
 
     // Display calculation steps for a stock
 // Display calculation steps for a stock
+// Display calculation steps for a stock
 showCalculationSteps(stock) {
     if (!stock.calculation_steps) {
         return '<p class="note">Calculation steps not available</p>';
@@ -756,28 +757,28 @@ showCalculationSteps(stock) {
     
     let stepsHtml = `
         <div class="calculation-steps">
-            <h4>📊 Calculation Steps for ${stock.symbol}</h4>
+            <h4>Calculation Steps for ${stock.symbol}</h4>
     `;
     
     // Annual Returns
     if (steps.annual_returns && steps.annual_returns.length > 0) {
         stepsHtml += `
             <div class="step-section">
-                <h5>1. Annual Returns</h5>
+                <h5>1. Annual Returns Calculation</h5>
+                <p class="formula">${steps.annual_returns[0].formula}</p>
                 <div class="step-details">
         `;
         
         steps.annual_returns.forEach(item => {
-            if (item.year) {
-                stepsHtml += `
-                    <div class="calculation-example">
-                        <div class="year-badge">${item.year}</div>
-                        <div class="calc-detail">
-                            <div class="calc-result">${item.result}</div>
-                        </div>
+            stepsHtml += `
+                <div class="calculation-example">
+                    <div class="year-badge">${item.year}</div>
+                    <div class="calc-detail">
+                        <div class="calc-values">${item.values}</div>
+                        <div class="calc-result">${item.result}</div>
                     </div>
-                `;
-            }
+                </div>
+            `;
         });
         
         stepsHtml += `</div></div>`;
@@ -787,19 +788,19 @@ showCalculationSteps(stock) {
     if (steps.expected_return) {
         stepsHtml += `
             <div class="step-section">
-                <h5>2. Expected Return</h5>
-                <p class="formula">${steps.expected_return.formula || 'E(r) = Σ(rᵢ × pᵢ)'}</p>
+                <h5>2. Expected Return Calculation</h5>
+                <p class="formula">${steps.expected_return.formula}</p>
                 <div class="step-details">
         `;
         
-        if (steps.expected_return.steps && steps.expected_return.steps.length > 0) {
+        if (steps.expected_return.steps) {
             steps.expected_return.steps.forEach(step => {
                 stepsHtml += `<p class="step-calculation">${step}</p>`;
             });
         }
         
         stepsHtml += `
-                    <p class="step-result"><strong>Expected Return = ${steps.expected_return.result || stock.expected_return}%</strong></p>
+                    <p class="step-result"><strong>Expected Return = ${steps.expected_return.result}</strong></p>
                 </div>
             </div>
         `;
@@ -809,19 +810,19 @@ showCalculationSteps(stock) {
     if (steps.variance) {
         stepsHtml += `
             <div class="step-section">
-                <h5>3. Variance</h5>
-                <p class="formula">${steps.variance.formula || 'σ² = Σ[(rᵢ - E(r))² × pᵢ]'}</p>
+                <h5>3. Variance Calculation</h5>
+                <p class="formula">${steps.variance.formula}</p>
                 <div class="step-details">
         `;
         
-        if (steps.variance.steps && steps.variance.steps.length > 0) {
+        if (steps.variance.steps) {
             steps.variance.steps.forEach(step => {
                 stepsHtml += `<p class="step-calculation">${step}</p>`;
             });
         }
         
         stepsHtml += `
-                    <p class="step-result"><strong>Variance = ${steps.variance.result || stock.variance}</strong></p>
+                    <p class="step-result"><strong>Variance = ${steps.variance.result}</strong></p>
                 </div>
             </div>
         `;
@@ -831,29 +832,27 @@ showCalculationSteps(stock) {
     if (steps.std_deviation) {
         stepsHtml += `
             <div class="step-section">
-                <h5>4. Standard Deviation</h5>
-                <p class="formula">${steps.std_deviation.formula || 'σ = √σ²'}</p>
+                <h5>4. Standard Deviation Calculation</h5>
+                <p class="formula">${steps.std_deviation.formula}</p>
                 <div class="step-details">
         `;
         
-        if (steps.std_deviation.steps && steps.std_deviation.steps.length > 0) {
+        if (steps.std_deviation.steps) {
             steps.std_deviation.steps.forEach(step => {
                 stepsHtml += `<p class="step-calculation">${step}</p>`;
             });
         }
         
         stepsHtml += `
-                    <p class="step-result"><strong>Standard Deviation = ${steps.std_deviation.result || stock.std_deviation}%</strong></p>
+                    <p class="step-result"><strong>Standard Deviation = ${steps.std_deviation.result}</strong></p>
                 </div>
             </div>
         `;
     }
     
     stepsHtml += `</div>`;
-    
     return stepsHtml;
 },
-
     // Toggle calculation steps visibility
     toggleSteps(symbol) {
         const stepsDiv = document.getElementById(`steps-${symbol}`);
