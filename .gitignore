@@ -1,54 +1,9 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyc
-*.pyd
-*.pyo
-*.so
+# Data files (but not the metrics JSON)
+# But keep the metrics JSON
+!data/stock_metrics.json
 
-# Virtual Environment
+# Other ignores
+__pycache__/
+*.pyc
 venv/
 env/
-ENV/
-env.bak/
-venv.bak/
-pythonenv*
-
-# Flask
-instance/
-.webassets-cache
-.env
-.flaskenv
-
-# Deployment
-.env.local
-.env.production
-.env.development
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Testing
-.coverage
-htmlcov/
-.pytest_cache/
-.tox/
-*.cover
-
-# Distribution
-dist/
-build/
-*.egg-info/
-
-# Logs
-logs/
-*.log
-*.log.*
-
-# Render specific
-render.yaml  # Only if you want to keep it private (but usually you want this in repo)

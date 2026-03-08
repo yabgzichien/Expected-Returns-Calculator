@@ -7,6 +7,7 @@ const StockAnalyzer = {
 
     // Initialize the application
     async init() {
+        console.log('Initializing Stock Analyzer...');
         this.bindEvents();
         await this.loadAllStocks();
         this.setupEventListeners();
@@ -53,19 +54,24 @@ const StockAnalyzer = {
     initDateInputs() {
         const today = new Date();
         const defaultEnd = new Date('2026-01-01');
-        const defaultStart = new Date('2010-01-01');
+        const defaultStart = new Date('2015-01-01');
         
-        document.getElementById('start-date').value = defaultStart.toISOString().split('T')[0];
-        document.getElementById('end-date').value = defaultEnd.toISOString().split('T')[0];
+        const startInput = document.getElementById('start-date');
+        const endInput = document.getElementById('end-date');
         
-        // Set max date to today
-        document.getElementById('end-date').max = today.toISOString().split('T')[0];
+        if (startInput) {
+            startInput.value = defaultStart.toISOString().split('T')[0];
+        }
+        if (endInput) {
+            endInput.value = defaultEnd.toISOString().split('T')[0];
+            endInput.max = today.toISOString().split('T')[0];
+        }
     },
 
     // Get current date range values
     getDateRange() {
-        const startDate = document.getElementById('start-date').value;
-        const endDate = document.getElementById('end-date').value;
+        const startDate = document.getElementById('start-date')?.value;
+        const endDate = document.getElementById('end-date')?.value;
         
         // Validate dates
         if (!startDate || !endDate) {
@@ -99,14 +105,17 @@ const StockAnalyzer = {
                 startDate.setFullYear(endDate.getFullYear() - 15);
                 break;
             case 'max':
-                startDate = new Date('2010-01-01');
+                startDate = new Date('2015-01-01');
                 break;
         }
         
         const startDateStr = startDate.toISOString().split('T')[0];
         
-        document.getElementById('start-date').value = startDateStr;
-        document.getElementById('end-date').value = endDateStr;
+        const startInput = document.getElementById('start-date');
+        const endInput = document.getElementById('end-date');
+        
+        if (startInput) startInput.value = startDateStr;
+        if (endInput) endInput.value = endDateStr;
         
         this.showNotification(`Period set to ${preset}`, 'success');
     },
@@ -114,13 +123,20 @@ const StockAnalyzer = {
     // Load all stocks from the backend
     async loadAllStocks() {
         try {
+            console.log('Loading stocks...');
             const response = await fetch('/api/stocks');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             this.allStocks = await response.json();
+            console.log('Loaded stocks:', this.allStocks.length);
             this.populateStockBrowser();
         } catch (error) {
             console.error('Error loading stocks:', error);
-            document.getElementById('stock-browser').innerHTML = 
-                '<p class="error">Failed to load stocks. Please refresh the page.</p>';
+            const browserDiv = document.getElementById('stock-browser');
+            if (browserDiv) {
+                browserDiv.innerHTML = '<p class="error">Failed to load stocks. Please refresh the page.</p>';
+            }
         }
     },
 
@@ -205,6 +221,7 @@ const StockAnalyzer = {
         
         try {
             const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+            if (!response.ok) return;
             const stocks = await response.json();
             this.displaySearchResults(stocks);
         } catch (error) {
@@ -314,6 +331,8 @@ const StockAnalyzer = {
         const weightDiv = document.getElementById('weight-inputs');
         const weightSection = document.querySelector('.weight-section');
         
+        if (!weightSection || !weightDiv) return;
+        
         if (this.selectedStocks.length < 2) {
             weightSection.style.display = 'none';
             return;
@@ -405,12 +424,10 @@ const StockAnalyzer = {
                 warningDiv.textContent = `⚠️ Total weight is ${total.toFixed(1)}%. Should be 100%`;
                 document.querySelector('.weight-section').appendChild(warningDiv);
             }
-            analyzeBtn.disabled = true;
-            analyzeBtn.title = 'Weights must sum to 100%';
+            if (analyzeBtn) analyzeBtn.disabled = true;
         } else {
             if (warning) warning.remove();
-            analyzeBtn.disabled = false;
-            analyzeBtn.title = '';
+            if (analyzeBtn) analyzeBtn.disabled = false;
         }
     },
 
@@ -420,22 +437,15 @@ const StockAnalyzer = {
         this.updateSelectedStocksDisplay();
         this.updateWeightInputs();
         this.updateStockCount();
-        document.getElementById('results-section').style.display = 'none';
+        
+        const resultsSection = document.getElementById('results-section');
+        if (resultsSection) {
+            resultsSection.style.display = 'none';
+        }
         
         if (this.chart) {
             this.chart.destroy();
             this.chart = null;
-        }
-    },
-
-    // Debug response
-    debugResponse(data) {
-        console.log('Full response data:', data);
-        console.log('Is portfolio:', data.is_portfolio);
-        console.log('Has portfolio_calculation_steps:', data.portfolio_calculation_steps ? 'YES' : 'NO');
-        if (data.portfolio_calculation_steps) {
-            console.log('Number of steps:', data.portfolio_calculation_steps.length);
-            console.log('Steps content:', data.portfolio_calculation_steps);
         }
     },
 
@@ -473,6 +483,7 @@ const StockAnalyzer = {
         this.toggleLoading(true);
 
         try {
+            console.log('Analyzing stocks:', this.selectedStocks);
             const response = await fetch('/api/analyze-multiple', {
                 method: 'POST',
                 headers: {
@@ -486,10 +497,14 @@ const StockAnalyzer = {
                 })
             });
             
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const data = await response.json();
+            console.log('Analysis results:', data);
             
             if (data.success) {
-                this.debugResponse(data);
                 this.displayAnalysisResults(data);
                 this.showNotification('Analysis complete!', 'success');
             } else {
@@ -501,20 +516,23 @@ const StockAnalyzer = {
             }
         } catch (error) {
             console.error('Analysis error:', error);
-            this.showNotification('Error connecting to server. Please make sure the backend is running.', 'error');
+            this.showNotification('Error connecting to server: ' + error.message, 'error');
         } finally {
             this.toggleLoading(false);
         }
     },
 
-    // Display analysis results (handles both single and multiple stocks)
+    // Display analysis results
     displayAnalysisResults(data) {
-        document.getElementById('results-section').style.display = 'block';
-        document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+        const resultsSection = document.getElementById('results-section');
+        if (!resultsSection) return;
         
-        const stocks = data.stocks;
+        resultsSection.style.display = 'block';
+        resultsSection.scrollIntoView({ behavior: 'smooth' });
         
-        // Display summary based on number of stocks
+        const stocks = data.stocks || [];
+        
+        // Display summary
         this.displayAnalysisSummary(data);
         
         // Display stock cards
@@ -523,30 +541,35 @@ const StockAnalyzer = {
         // Display metrics table
         this.displayMetricsTable(stocks);
         
-        // Create chart
-        this.createReturnsChart(stocks);
+        // Create chart if we have years data
+        if (stocks.length > 0 && stocks[0].years) {
+            this.createReturnsChart(stocks);
+        }
     },
 
     // Display analysis summary
     displayAnalysisSummary(data) {
         const summaryDiv = document.getElementById('portfolio-summary');
-        const stocks = data.stocks;
+        if (!summaryDiv) return;
+        
+        const stocks = data.stocks || [];
         const isPortfolio = stocks.length > 1;
-        const period = data.analysis_period || { start: '2010-01-01', end: '2026-01-01' };
+        const period = data.analysis_period || { start: '2015-01-01', end: '2026-01-01' };
         
         // Format dates for display
         const startYear = period.start.split('-')[0];
         const endYear = period.end.split('-')[0];
         
         // Determine return value and class
-        let returnValue, returnClass;
+        let returnValue = 0;
+        let returnClass = '';
+        
         if (isPortfolio) {
-            returnValue = data.portfolio_return;
-            returnClass = returnValue >= 0 ? 'positive' : 'negative';
-        } else {
-            returnValue = stocks[0].expected_return;
-            returnClass = returnValue >= 0 ? 'positive' : 'negative';
+            returnValue = data.portfolio_return || 0;
+        } else if (stocks.length > 0) {
+            returnValue = stocks[0].expected_return || 0;
         }
+        returnClass = returnValue >= 0 ? 'positive' : 'negative';
         
         // Build summary HTML
         let summaryHtml = `
@@ -571,16 +594,16 @@ const StockAnalyzer = {
         // Add weight information for portfolios
         if (isPortfolio && data.weights) {
             summaryHtml += `
-                <div class="weight-breakdown" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.2);">
-                    <h4 style="font-size: 0.9rem; margin-bottom: 0.5rem; opacity: 0.9;">Portfolio Weights</h4>
-                    <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                <div class="weight-breakdown">
+                    <h4>Portfolio Weights</h4>
+                    <div class="weight-list">
             `;
             
             stocks.forEach((stock, index) => {
                 summaryHtml += `
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <span style="font-size: 0.85rem;">${stock.symbol}:</span>
-                        <span style="font-weight: 600;">${data.weights[index]}%</span>
+                    <div class="weight-item">
+                        <span class="weight-symbol">${stock.symbol}:</span>
+                        <span class="weight-value">${data.weights[index]}%</span>
                     </div>
                 `;
             });
@@ -588,11 +611,13 @@ const StockAnalyzer = {
             summaryHtml += `</div>`;
             
             // Add button to show portfolio calculation steps
-            summaryHtml += `
-                <button class="show-portfolio-steps-btn" onclick="StockAnalyzer.togglePortfolioSteps()">
-                    Show Portfolio Return Calculation Steps
-                </button>
-            `;
+            if (data.portfolio_calculation_steps) {
+                summaryHtml += `
+                    <button class="show-portfolio-steps-btn" onclick="StockAnalyzer.togglePortfolioSteps()">
+                        Show Portfolio Return Calculation Steps
+                    </button>
+                `;
+            }
             
             summaryHtml += `</div>`;
         }
@@ -600,27 +625,20 @@ const StockAnalyzer = {
         summaryHtml += `</div>`;
         
         // Add portfolio steps container
-        summaryHtml += `
-            <div id="portfolio-steps-container" class="steps-container" style="display: none; margin-top: 1rem;">
-        `;
-        
-        // Only add content if we have steps
         if (isPortfolio && data.portfolio_calculation_steps) {
-            summaryHtml += this.showPortfolioCalculationSteps(data);
-        } else {
-            summaryHtml += '<p class="note">No calculation steps available</p>';
+            summaryHtml += `
+                <div id="portfolio-steps-container" class="steps-container" style="display: none;">
+                    ${this.showPortfolioCalculationSteps(data)}
+                </div>
+            `;
         }
-        
-        summaryHtml += `</div>`;
         
         summaryDiv.innerHTML = summaryHtml;
     },
 
     // Display portfolio calculation steps
     showPortfolioCalculationSteps(data) {
-        console.log('Showing portfolio steps:', data.portfolio_calculation_steps);
-        
-        if (!data.is_portfolio || !data.portfolio_calculation_steps || data.portfolio_calculation_steps.length === 0) {
+        if (!data.portfolio_calculation_steps) {
             return '<p class="note">Portfolio calculation steps not available</p>';
         }
         
@@ -666,48 +684,52 @@ const StockAnalyzer = {
     // Toggle portfolio calculation steps visibility
     togglePortfolioSteps() {
         const stepsDiv = document.getElementById('portfolio-steps-container');
-        if (stepsDiv.style.display === 'none') {
-            stepsDiv.style.display = 'block';
-            stepsDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        } else {
-            stepsDiv.style.display = 'none';
+        if (stepsDiv) {
+            if (stepsDiv.style.display === 'none') {
+                stepsDiv.style.display = 'block';
+                stepsDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else {
+                stepsDiv.style.display = 'none';
+            }
         }
     },
 
     // Display stock cards
     displayStockCards(stocks) {
         const cardsDiv = document.getElementById('stock-cards');
+        if (!cardsDiv) return;
+        
         let html = '';
         
         stocks.forEach(stock => {
-            const returnClass = stock.expected_return >= 0 ? 'positive' : 'negative';
+            const returnClass = (stock.expected_return || 0) >= 0 ? 'positive' : 'negative';
             
             html += `
                 <div class="stock-card">
                     <div class="stock-header">
-                        <h4 title="${stock.name}">${this.truncate(stock.name, 35)}</h4>
+                        <h4 title="${stock.name || stock.symbol}">${this.truncate(stock.name || stock.symbol, 35)}</h4>
                         <span class="stock-symbol">${stock.symbol}</span>
                     </div>
                     <div class="stock-metrics">
                         <div class="metric">
                             <span class="metric-label">Expected Return:</span>
-                            <span class="metric-value ${returnClass}">${stock.expected_return}%</span>
+                            <span class="metric-value ${returnClass}">${stock.expected_return || 0}%</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">Risk (Std Dev):</span>
-                            <span class="metric-value">${stock.std_deviation}%</span>
+                            <span class="metric-value">${stock.std_deviation || 0}%</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">Variance:</span>
-                            <span class="metric-value">${stock.variance}</span>
+                            <span class="metric-value">${stock.variance || 0}</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">Data Points:</span>
-                            <span class="metric-value">${stock.data_points} years</span>
+                            <span class="metric-value">${stock.data_points || 0} years</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">Current Price:</span>
-                            <span class="metric-value">RM ${stock.current_price?.toFixed(2) || 'N/A'}</span>
+                            <span class="metric-value">RM ${stock.current_price ? stock.current_price.toFixed(2) : 'N/A'}</span>
                         </div>
                     </div>
                     <button class="show-steps-btn" onclick="StockAnalyzer.toggleSteps('${stock.symbol}')">
@@ -724,142 +746,146 @@ const StockAnalyzer = {
     },
 
     // Display calculation steps for a stock
-    showCalculationSteps(stock) {
-        const steps = stock.calculation_steps;
-        
-        let stepsHtml = `
-            <div class="calculation-steps">
-                <h4>📊 Calculation Steps for ${stock.symbol}</h4>
-                
-                <div class="step-section">
-                    <h5>1. Annual Returns Calculation</h5>
-                    <p class="formula">${steps.annual_returns[0].formula}</p>
-                    <div class="step-details">
+// Display calculation steps for a stock
+showCalculationSteps(stock) {
+    if (!stock.calculation_steps) {
+        return '<p class="note">Calculation steps not available</p>';
+    }
+    
+    const steps = stock.calculation_steps;
+    
+    let stepsHtml = `
+        <div class="calculation-steps">
+            <h4>📊 Calculation Steps for ${stock.symbol}</h4>
+    `;
+    
+    // Annual Returns
+    if (steps.annual_returns && steps.annual_returns.length > 0) {
+        stepsHtml += `
+            <div class="step-section">
+                <h5>1. Annual Returns</h5>
+                <div class="step-details">
         `;
         
-        // Show first few annual return calculations as examples
-        steps.annual_returns.slice(0, 3).forEach(calc => {
-            stepsHtml += `
-                <div class="calculation-example">
-                    <div class="year-badge">${calc.year}</div>
-                    <div class="calc-detail">
-                        <div>${calc.values}</div>
-                        <div class="calc-result">${calc.result}</div>
+        steps.annual_returns.forEach(item => {
+            if (item.year) {
+                stepsHtml += `
+                    <div class="calculation-example">
+                        <div class="year-badge">${item.year}</div>
+                        <div class="calc-detail">
+                            <div class="calc-result">${item.result}</div>
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
+            }
         });
         
-        if (steps.annual_returns.length > 3) {
-            stepsHtml += `<p class="note">... and ${steps.annual_returns.length - 3} more years</p>`;
+        stepsHtml += `</div></div>`;
+    }
+    
+    // Expected Return
+    if (steps.expected_return) {
+        stepsHtml += `
+            <div class="step-section">
+                <h5>2. Expected Return</h5>
+                <p class="formula">${steps.expected_return.formula || 'E(r) = Σ(rᵢ × pᵢ)'}</p>
+                <div class="step-details">
+        `;
+        
+        if (steps.expected_return.steps && steps.expected_return.steps.length > 0) {
+            steps.expected_return.steps.forEach(step => {
+                stepsHtml += `<p class="step-calculation">${step}</p>`;
+            });
         }
         
         stepsHtml += `
-                    </div>
-                </div>
-                
-                <div class="step-section">
-                    <h5>2. Expected Return Calculation</h5>
-                    <p class="formula">${steps.expected_return.formula}</p>
-                    <div class="step-details">
-        `;
-        
-        steps.expected_return.components.forEach(comp => {
-            if (comp.description) {
-                stepsHtml += `<p class="step-description">${comp.description}</p>`;
-            }
-            if (comp.values) {
-                stepsHtml += `<p class="step-values">${comp.values}</p>`;
-            }
-            if (comp.calculation) {
-                stepsHtml += `<p class="step-calculation">${comp.calculation}</p>`;
-            }
-            if (comp.sum) {
-                stepsHtml += `<p class="step-sum">${comp.sum}</p>`;
-            }
-            if (comp.result) {
-                stepsHtml += `<p class="step-result"><strong>${comp.result}</strong></p>`;
-            }
-        });
-        
-        stepsHtml += `
-                    </div>
-                </div>
-                
-                <div class="step-section">
-                    <h5>3. Variance Calculation</h5>
-                    <p class="formula">${steps.variance.formula}</p>
-                    <div class="step-details">
-        `;
-        
-        steps.variance.components.forEach(comp => {
-            if (comp.description) {
-                stepsHtml += `<p class="step-description">${comp.description}</p>`;
-            }
-            if (comp.values) {
-                stepsHtml += `<div class="step-values-list">`;
-                comp.values.slice(0, 3).forEach(val => {
-                    stepsHtml += `<p>${val}</p>`;
-                });
-                if (comp.values.length > 3) {
-                    stepsHtml += `<p class="note">... and ${comp.values.length - 3} more</p>`;
-                }
-                stepsHtml += `</div>`;
-            }
-            if (comp.calculation) {
-                stepsHtml += `<p class="step-calculation">${comp.calculation}</p>`;
-            }
-            if (comp.result) {
-                stepsHtml += `<p class="step-result"><strong>${comp.result}</strong></p>`;
-            }
-        });
-        
-        stepsHtml += `
-                    </div>
-                </div>
-                
-                <div class="step-section">
-                    <h5>4. Standard Deviation Calculation</h5>
-                    <p class="formula">${steps.std_deviation.formula}</p>
-                    <div class="step-details">
-                        <p class="step-calculation">${steps.std_deviation.calculation}</p>
-                        <p class="step-result"><strong>${steps.std_deviation.result}</strong></p>
-                    </div>
+                    <p class="step-result"><strong>Expected Return = ${steps.expected_return.result || stock.expected_return}%</strong></p>
                 </div>
             </div>
         `;
+    }
+    
+    // Variance
+    if (steps.variance) {
+        stepsHtml += `
+            <div class="step-section">
+                <h5>3. Variance</h5>
+                <p class="formula">${steps.variance.formula || 'σ² = Σ[(rᵢ - E(r))² × pᵢ]'}</p>
+                <div class="step-details">
+        `;
         
-        return stepsHtml;
-    },
+        if (steps.variance.steps && steps.variance.steps.length > 0) {
+            steps.variance.steps.forEach(step => {
+                stepsHtml += `<p class="step-calculation">${step}</p>`;
+            });
+        }
+        
+        stepsHtml += `
+                    <p class="step-result"><strong>Variance = ${steps.variance.result || stock.variance}</strong></p>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Standard Deviation
+    if (steps.std_deviation) {
+        stepsHtml += `
+            <div class="step-section">
+                <h5>4. Standard Deviation</h5>
+                <p class="formula">${steps.std_deviation.formula || 'σ = √σ²'}</p>
+                <div class="step-details">
+        `;
+        
+        if (steps.std_deviation.steps && steps.std_deviation.steps.length > 0) {
+            steps.std_deviation.steps.forEach(step => {
+                stepsHtml += `<p class="step-calculation">${step}</p>`;
+            });
+        }
+        
+        stepsHtml += `
+                    <p class="step-result"><strong>Standard Deviation = ${steps.std_deviation.result || stock.std_deviation}%</strong></p>
+                </div>
+            </div>
+        `;
+    }
+    
+    stepsHtml += `</div>`;
+    
+    return stepsHtml;
+},
 
     // Toggle calculation steps visibility
     toggleSteps(symbol) {
         const stepsDiv = document.getElementById(`steps-${symbol}`);
-        if (stepsDiv.style.display === 'none') {
-            stepsDiv.style.display = 'block';
-        } else {
-            stepsDiv.style.display = 'none';
+        if (stepsDiv) {
+            if (stepsDiv.style.display === 'none') {
+                stepsDiv.style.display = 'block';
+            } else {
+                stepsDiv.style.display = 'none';
+            }
         }
     },
 
     // Display metrics table
     displayMetricsTable(stocks) {
         const tbody = document.getElementById('metrics-body');
+        if (!tbody) return;
+        
         let html = '';
         
         stocks.forEach(stock => {
-            const returnClass = stock.expected_return >= 0 ? 'positive' : 'negative';
+            const returnClass = (stock.expected_return || 0) >= 0 ? 'positive' : 'negative';
             
             html += `
                 <tr>
                     <td>
-                        <strong>${this.truncate(stock.name, 35)}</strong>
+                        <strong>${this.truncate(stock.name || stock.symbol, 35)}</strong>
                         <br><small class="stock-symbol">${stock.symbol}</small>
                     </td>
-                    <td class="${returnClass}"><strong>${stock.expected_return}%</strong></td>
-                    <td>${stock.std_deviation}%</td>
-                    <td>${stock.variance}</td>
-                    <td>${stock.data_points} years</td>
+                    <td class="${returnClass}"><strong>${stock.expected_return || 0}%</strong></td>
+                    <td>${stock.std_deviation || 0}%</td>
+                    <td>${stock.variance || 0}</td>
+                    <td>${stock.data_points || 0} years</td>
                 </tr>
             `;
         });
@@ -869,10 +895,19 @@ const StockAnalyzer = {
 
     // Create returns comparison chart
     createReturnsChart(stocks) {
-        const ctx = document.getElementById('returns-chart').getContext('2d');
+        const canvas = document.getElementById('returns-chart');
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
         
         if (this.chart) {
             this.chart.destroy();
+        }
+        
+        // Check if we have data
+        if (!stocks[0] || !stocks[0].years || !stocks[0].annual_returns) {
+            console.warn('No chart data available');
+            return;
         }
         
         const datasets = [];
@@ -883,8 +918,8 @@ const StockAnalyzer = {
         
         stocks.forEach((stock, index) => {
             datasets.push({
-                label: `${stock.symbol} - ${this.truncate(stock.name, 20)}`,
-                data: stock.annual_returns,
+                label: `${stock.symbol} - ${this.truncate(stock.name || stock.symbol, 20)}`,
+                data: stock.annual_returns || [],
                 borderColor: colors[index % colors.length],
                 backgroundColor: 'transparent',
                 tension: 0.1,
@@ -901,7 +936,7 @@ const StockAnalyzer = {
         this.chart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: stocks[0].years,
+                labels: stocks[0].years || [],
                 datasets: datasets
             },
             options: {
@@ -979,10 +1014,12 @@ const StockAnalyzer = {
     },
 
     escapeString(str) {
+        if (!str) return '';
         return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     },
 
     sanitizeId(str) {
+        if (!str) return '';
         return str.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
     },
 
@@ -990,12 +1027,11 @@ const StockAnalyzer = {
         const overlay = document.getElementById('loading-overlay');
         const analyzeBtn = document.getElementById('analyze-btn');
         
-        if (show) {
-            overlay.style.display = 'flex';
-            analyzeBtn.disabled = true;
-        } else {
-            overlay.style.display = 'none';
-            analyzeBtn.disabled = false;
+        if (overlay) {
+            overlay.style.display = show ? 'flex' : 'none';
+        }
+        if (analyzeBtn) {
+            analyzeBtn.disabled = show;
         }
     },
 
@@ -1025,7 +1061,6 @@ const StockAnalyzer = {
 
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    // Make StockAnalyzer globally accessible
     window.StockAnalyzer = StockAnalyzer;
     StockAnalyzer.init();
 });
