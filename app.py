@@ -90,7 +90,7 @@ def analyze_single_stock():
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
+   
     stocks_count = len(analyzer.stock_info)
     return jsonify({
         'status': 'healthy',
@@ -130,10 +130,9 @@ def debug_info():
 
 @app.route('/api/refresh', methods=['POST'])
 def refresh_data():
-    """Force refresh of stock data from CSV files"""
     try:
         global analyzer
-        analyzer = StockAnalyzer()  # Re-initialize to reload data
+        analyzer = StockAnalyzer()  
         return jsonify({
             'success': True,
             'message': 'Data refreshed',

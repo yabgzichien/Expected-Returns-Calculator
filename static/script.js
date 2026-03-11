@@ -574,7 +574,7 @@ const StockAnalyzer = {
         // Build summary HTML
         let summaryHtml = `
             <div class="summary-card">
-                <h3>${isPortfolio ? '📊 Portfolio Summary' : '📈 Stock Analysis'}</h3>
+                <h3>${isPortfolio ? 'Portfolio Summary' : 'Stock Analysis'}</h3>
                 <div class="summary-metrics">
                     <div class="metric">
                         <span class="metric-label">${isPortfolio ? 'Expected Portfolio Return' : 'Expected Return'}:</span>
